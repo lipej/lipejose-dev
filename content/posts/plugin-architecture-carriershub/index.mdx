@@ -9,7 +9,7 @@ tags:
 
 **OBS: esse artigo foi originalmente escrito no livebook, toda a saida de código do livebook foi colocada abaixo de seu respectivo bloco de código.**
 
-Olá! E se você pudesse ter um sistema tão flexível a ponto de precisar apenas criar plugins para adicionar novas integrações? Aqui eu quis passar um pouco do que aprendi sobre a arquitetura de plugins, e como eu consegui aplicar esses conceitos usando o elixir, qualquer dúvida, critica e sugestão, sinta-se a vontade em me contatar no e-mail: hi@lipejose.dev
+Olá! E se você pudesse ter um sistema tão flexível a ponto de precisar apenas criar plugins para adicionar novas integrações? Aqui quis passar um pouco do que aprendi sobre a arquitetura de plugins e como eu consegui aplicar esses conceitos usando o elixir, qualquer dúvida, critica e sugestão, sinta-se a vontade em me contatar no e-mail: hi@lipejose.dev
 
 ### O Projeto
 
@@ -72,8 +72,8 @@ end
 {:module, Plugins.Braspress, <<70, 79, 82, 49, 0, 0, 5, ...>>, {:tracking, 2}}
 ```
 
-Agora que temos dois plugins definidos como modulos elixir precisamos saber como carregar esses plugins. Para isso vamos definir um módulo chamado Loader, ele tem como alias todos os plugins e uma função chamada `can_loader` que recebe apenas o nome da transportadora que ali chamamos de **integrations** e verifica a existencia do plugin.
-Dentro da função a primeira coisa que precisamos fazer é se certificar em transformar tudo para downcase e depois para capitalize para dar match correto com o nome do modulo da transportadora. Em seguida usamos a função `ensure_loader` do próprio Elixir para verificar se o modulo consegue ser carregado e caso sim, retornamos ele para ser utilizado.
+Agora que temos dois plugins definidos como módulos elixir precisamos saber como carregar esses plugins. Para isso vamos definir um módulo chamado Loader, ele tem como alias todos os plugins e uma função chamada `can_loader` que recebe apenas o nome da transportadora que ali chamamos de **integrations** e verifica a existencia do plugin.
+Dentro da função a primeira coisa que precisamos fazer é se certificar em transformar tudo para downcase e depois para capitalize para dar match correto com o nome do módulo da transportadora. Em seguida usamos a função `ensure_loader` do próprio Elixir para verificar se o módulo consegue ser carregado e caso sim, retornamos ele para ser utilizado.
 
 ```elixir
 defmodule Loader do
@@ -101,7 +101,7 @@ end
 {:module, Loader, <<70, 79, 82, 49, 0, 0, 7, ...>>, {:can_loader, 1}}
 ```
 
-Vamos tentar carregar um plugin que existe e um que não e ver nos outputs que o primeiro é carregado com sucesso e o segundo retorna um erro de que não foi implementado.
+Vamos tentar carregar um plugin que existe e um que não e ver nas saídas que o primeiro é carregado com sucesso e o segundo retorna um erro de que não foi implementado.
 
 ```elixir
 Loader.can_loader("correios")
@@ -125,9 +125,9 @@ Show! Agora já conseguimos carregar os plugins existentes.
 
 <!-- livebook:{"break_markdown":true} -->
 
-Mas agora como sabemos que um plugin consegue executar um método como o próprio tracking?
+Mas agora como saberemos que um plugin consegue executar um método como o de tracking por exemplo?
 
-Para isso vamos definir mais um módulo, esse vai se chamar Manager e vai ter uma função chamada `can_perform_action` que receber o plugin que ja nos certificamos que existe e uma string com o nome do método que se quer executar nesse plugin, novamente nos certificamos em converter tudo para downcase e depois para atom, pois é o que a função `Keyword.has_key` necessita para verifica a existencia da função dentro do plugin e retornar um boleano. Com o resultado caso ele seja true, retornamos a função, caso não, um erro.
+Para isso vamos definir mais um módulo, esse vai se chamar Manager e vai ter uma função chamada `can_perform_action` que receber o plugin que ja nos certificamos que existe e uma string com o nome do método que se quer executar nesse plugin, novamente nos certificamos em converter tudo para downcase e depois para atom, pois é o que a função `Keyword.has_key` necessita para verifica a existência da função dentro do plugin e retornar um boleano. Com o resultado caso ele seja true, retornamos a função, caso não, um erro.
 
 ```elixir
 defmodule Manager do
@@ -149,7 +149,7 @@ end
 {:module, Manager, <<70, 79, 82, 49, 0, 0, 8, ...>>, {:can_perform_action, 2}}
 ```
 
-Aqui testamos o funcionamento da função em caso de sucesso e erro. Como esperado ele tem o metodo tracking definido mas não o solicitation.
+Aqui testamos o funcionamento da função em caso de sucesso e erro. Como esperado ele tem o método tracking definido mas não o solicitation.
 
 ```elixir
 {:ok, plugin} = Loader.can_loader("correios")
@@ -187,7 +187,11 @@ apply(plugin, action, [data, fields])
  "{\"rastreio\":[{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 04/10/2021 | Hora: 17:44\",\"origem\":\"Origem: País -  / \",\"destino\":\"Destino: País -  / BR\"},{\"status\":\"Status: Objeto recebido pelos Correios do Brasil\",\"data\":\"Data  : 08/10/2021 | Hora: 15:51\",\"local\":\"Local: Unidade Operacional - Curitiba / PR\"},{\"status\":\"Status: Fiscalização aduaneira finalizada\",\"data\":\"Data  : 08/10/2021 | Hora: 16:24\",\"local\":\"Local: Unidade Operacional - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 08/10/2021 | Hora: 16:26\",\"origem\":\"Origem: Unidade Operacional - Curitiba / PR\",\"destino\":\"Destino: Unidade de Tratamento - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 09/10/2021 | Hora: 09:31\",\"origem\":\"Origem: Unidade de Tratamento - Curitiba / PR\",\"destino\":\"Destino: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 11/10/2021 | Hora: 11:43\",\"origem\":\"Origem: Unidade de Distribuição - Curitiba / PR\",\"destino\":\"Destino: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto saiu para entrega ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 09:51\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto entregue ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 17:00\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto entregue ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 17:00\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"}],\"status_code\":200,\"id\":\"2\"}"]
 ```
 
-Pronto! como é possivel ver no output, estamos conseguindo consultar códigos nos correios.
+Pronto! Como pudemos ver na saída já estamos conseguindo consultar códigos nos correios. Nesse ponto já poderíamos implementar rotas específicas para cada método ou algo mais genérico onde quem está requisitando passaria o que deseja e caso não existisse seria retornado o erro de plugin ou método não implementado.
+
+O legal dessa implementação é a versatilidade dela e a facilidade em adicionar novos recursos, eu curti bastante a arquitetura de plugins, o que você achou?
+
+#### Links úteis 
 
 Toda a aplicação com cadastro de clientes e acesso ao banco de dados pose ser consultado [aqui nesse repositório](https://github.com/lipejose/carriershub).
 
