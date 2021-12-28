@@ -1,0 +1,231 @@
+---
+title: "todo"
+date: 2021-12-16
+slug: "/todo"
+---
+
+---
+title: "todo"
+date: 2021-12-16
+slug: "/todo"
+---
+
+# Carriers hub
+
+**OBS: esse artigo foi originalmente escrito no livebook, toda a saida de código foi guardada abaixo de seu respectivo bloco de código, basta clicar em "output".**
+
+## O Projeto
+
+O carriershub é um projeto de integração com transportadoras, a intenção é criar um projeto onde quando for necessário realizar uma nova integração com alguma transportadora, seja necessária a criação de apenas mais um plugin sem a necessidade de alterar qualquer outra parte do código.
+
+A ideia aqui apresentada pode ser reaproveitada em inumeras situações e até mesmo em outras linguagens de programação.
+
+Um plugin de transportadora pode ter N métodos diferente como solicitação de etiquetas, cancelamento de postagem/coleta mas vamos nos limitar apenas ao método de tracking.
+
+Primeiramente criamos um mock (https://61be22a12a1dd4001708a255.mockapi.io/mock/correios/) para retornar um traking fake nas nossas chamadas. E para fazer as chamadas também precisamos instalar a lib tesla para fazer as requisições http.
+
+```elixir
+Mix.install([{:tesla, "~> 1.4"}])
+```
+
+<details>
+<summary>output</summary>
+  
+```output
+Resolving Hex dependencies...
+Dependency resolution completed:
+New:
+  mime 2.0.2
+  tesla 1.4.4
+* Getting tesla (Hex package)
+* Getting mime (Hex package)
+==> mime
+Compiling 1 file (.ex)
+Generated mime app
+==> tesla
+Compiling 29 files (.ex)
+Generated tesla app
+```
+
+```output
+:ok
+```
+
+</details>
+
+
+
+Com a lib instalada, vamos definir os nossos primeiros 2 plugins conforme abaixo, vamos usar o nosso mock apenas no primeiro plugin definido que no caso, chamei de correios, para isso definimos um atributo chamado de `@base_url`, seguido de uma função chamada tracking que recebe data com os codes e fields que por se tratar de um exemplo não iremos utilizar, mas seria os dados de integração que ficariam salvos no banco de dados.
+
+```elixir
+defmodule Plugins.Correios do
+  @base_url "https://61be22a12a1dd4001708a255.mockapi.io/mock/correios/"
+
+  def tracking(data, _fields) do
+    Enum.map(data.codes, fn code ->
+      {:ok, response} = Tesla.get(@base_url <> code)
+      response.body
+    end)
+  end
+end
+
+defmodule Plugins.Braspress do
+  def tracking(codes, _fields) do
+    IO.inspect(codes)
+  end
+end
+```
+<details>
+<summary>output</summary>
+  
+```output
+{:module, Plugins.Braspress, <<70, 79, 82, 49, 0, 0, 5, ...>>, {:tracking, 2}}
+```
+</details>
+
+Agora que temos dois plugins definidos como modulos elixir precisamos saber como carregar esses plugins. Para isso vamos definir um módulo chamado Loader, ele tem como alias todos os plugins e uma função chamada `can_loader` que recebe apenas o nome da transportadora que ali chamamos de **integrations** e verifica a existencia do plugin. 
+Dentro da função a primeira coisa que precisamos fazer é se certificar em transformar tudo para downcase e depois para capitalize para dar match correto com o nome do modulo da transportadora. Em seguida usamos a função `ensure_loader` do próprio Elixir para verificar se o modulo consegue ser carregado e caso sim, retornamos ele para ser utilizado.
+
+
+```elixir
+defmodule Loader do
+  alias Plugins
+
+  def can_loader(integration) do
+    plugin =
+      integration
+      |> String.downcase()
+      |> String.capitalize()
+
+    case Code.ensure_loaded(Module.concat(Plugins, plugin)) do
+      {:module, module} ->
+        {:ok, module}
+
+      _ ->
+        {:error, %{result: "#{integration} plugin was not implemeted", status: :bad_request}}
+    end
+  end
+end
+
+```
+<details>
+<summary>output</summary>
+
+```output
+{:module, Loader, <<70, 79, 82, 49, 0, 0, 7, ...>>, {:can_loader, 1}}
+```
+</details>
+
+Vamos tentar carregar um plugin que existe e um que não e ver nos outputs que o primeiro é carregado com sucesso e o segundo retorna um erro de que não foi implementado.
+
+```elixir
+Loader.can_loader("correios")
+```
+<details>
+<summary>output</summary>
+  
+```output
+{:ok, Plugins.Correios}
+```
+</details>
+
+```elixir
+Loader.can_loader("kangu")
+```
+<details>
+<summary>output</summary>
+  
+```output
+{:error, %{result: "kangu plugin was not implemeted", status: :bad_request}}
+```
+</details>
+
+Show! Agora já conseguimos carregar os plugins existentes.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Mas agora como sabemos que um plugin consegue executar um método como o próprio tracking?
+
+Para isso vamos definir mais um módulo, esse vai se chamar Manager e vai ter uma função chamada `can_perform_action` que receber o plugin que ja nos certificamos que existe e uma string com o nome do método que se quer executar nesse plugin, novamente nos certificamos em converter tudo para downcase e depois para atom, pois é o que a função `Keyword.has_key` necessita para verifica a existencia da função dentro do plugin e retornar um boleano. Com o resultado caso ele seja true, retornamos a função, caso não, um erro.
+
+
+```elixir
+defmodule Manager do
+  def can_perform_action(plugin, action) do
+    method =
+      action
+      |> String.downcase()
+      |> String.to_atom()
+
+    case Keyword.has_key?(plugin.__info__(:functions), method) do
+      true -> {:ok, method}
+      false -> {:error, %{result: "can't perform action: #{action}", status: :bad_request}}
+    end
+  end
+end
+```
+<details>
+<summary>output</summary>
+  
+```output
+{:module, Manager, <<70, 79, 82, 49, 0, 0, 8, ...>>, {:can_perform_action, 2}}
+```
+</details>
+
+Aqui testamos o funcionamento da função em caso de sucesso e erro. Como esperado ele tem o metodo tracking definido mas não o solicitation.
+
+```elixir
+{:ok, plugin} = Loader.can_loader("correios")
+Manager.can_perform_action(plugin, "tracking")
+```
+
+<details>
+<summary>output</summary>
+  
+```output
+{:ok, :tracking}
+```
+  
+</details>
+
+```elixir
+Manager.can_perform_action(plugin, "solicitation")
+```
+
+<details>
+<summary>output</summary>
+  
+```output
+{:error, %{result: "can't perform action: solicitation", status: :bad_request}}
+```
+</details>
+
+Agora que ja temos o nosso plugin loader e nosso manager prontos para executar nossa solicitação. Para isso vamos utilizar uma função do Elixir que chama `apply`, ela recebe 3 parâmetros, o plugin, a função a ser executada e os parâmetros que quer passar para essa função. Para executar um tracking nos correios então, o código ficaria assim:
+
+```elixir
+data = %{codes: ["1", "2"]}
+fields = %{token: "CORREIOSAUTHTOKEN"}
+
+{:ok, plugin} = Loader.can_loader("correios")
+{:ok, action} = Manager.can_perform_action(plugin, "tracking")
+
+apply(plugin, action, [data, fields])
+```
+
+<details>
+<summary>output</summary>
+  
+```output
+["{\"rastreio\":[{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 04/10/2021 | Hora: 17:44\",\"origem\":\"Origem: País -  / \",\"destino\":\"Destino: País -  / BR\"},{\"status\":\"Status: Objeto recebido pelos Correios do Brasil\",\"data\":\"Data  : 08/10/2021 | Hora: 15:51\",\"local\":\"Local: Unidade Operacional - Curitiba / PR\"},{\"status\":\"Status: Fiscalização aduaneira finalizada\",\"data\":\"Data  : 08/10/2021 | Hora: 16:24\",\"local\":\"Local: Unidade Operacional - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 08/10/2021 | Hora: 16:26\",\"origem\":\"Origem: Unidade Operacional - Curitiba / PR\",\"destino\":\"Destino: Unidade de Tratamento - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 09/10/2021 | Hora: 09:31\",\"origem\":\"Origem: Unidade de Tratamento - Curitiba / PR\",\"destino\":\"Destino: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 11/10/2021 | Hora: 11:43\",\"origem\":\"Origem: Unidade de Distribuição - Curitiba / PR\",\"destino\":\"Destino: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto saiu para entrega ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 09:51\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto entregue ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 17:00\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto entregue ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 17:00\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"}],\"status_code\":200,\"id\":\"1\"}",
+ "{\"rastreio\":[{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 04/10/2021 | Hora: 17:44\",\"origem\":\"Origem: País -  / \",\"destino\":\"Destino: País -  / BR\"},{\"status\":\"Status: Objeto recebido pelos Correios do Brasil\",\"data\":\"Data  : 08/10/2021 | Hora: 15:51\",\"local\":\"Local: Unidade Operacional - Curitiba / PR\"},{\"status\":\"Status: Fiscalização aduaneira finalizada\",\"data\":\"Data  : 08/10/2021 | Hora: 16:24\",\"local\":\"Local: Unidade Operacional - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 08/10/2021 | Hora: 16:26\",\"origem\":\"Origem: Unidade Operacional - Curitiba / PR\",\"destino\":\"Destino: Unidade de Tratamento - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 09/10/2021 | Hora: 09:31\",\"origem\":\"Origem: Unidade de Tratamento - Curitiba / PR\",\"destino\":\"Destino: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto em trânsito - por favor aguarde\",\"data\":\"Data  : 11/10/2021 | Hora: 11:43\",\"origem\":\"Origem: Unidade de Distribuição - Curitiba / PR\",\"destino\":\"Destino: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto saiu para entrega ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 09:51\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto entregue ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 17:00\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"},{\"status\":\"Status: Objeto entregue ao destinatário\",\"data\":\"Data  : 13/10/2021 | Hora: 17:00\",\"local\":\"Local: Unidade de Distribuição - Curitiba / PR\"}],\"status_code\":200,\"id\":\"2\"}"]
+```
+</details>
+
+Pronto! como é possivel ver no output, estamos conseguindo consultar codigos nos correio.
+
+Toda a aplicação com cadastro de clientes e acesso ao banco de dados pose ser consultado [aqui nesse repositório](https://github.com/lipejose/carriershub).
+</br>
+Se você quiser saber mais sobre o poder da arquitetura de plugins recomendo [esse video no youtube](https://www.youtube.com/watch?v=iCE1bDoit9Q).
+</br>
+
+Obrigado e até o próximo! ;D
