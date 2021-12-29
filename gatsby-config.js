@@ -12,8 +12,7 @@ module.exports = {
     siteHeadline: `Lipe - Digital Garden`,
     siteUrl: `https://lipejose.dev`,
     siteDescription: `Personal digital garden of a software developer`,
-    siteLanguage: `en`,
-    siteImage: `/banner.jpg`,
+    siteLanguage: `pt-br`,
     author: `@lipejose`,
   },
   plugins: [
